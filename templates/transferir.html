@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}Transferir - NequiZ{% endblock %}
+{% block subtitle %}Enviar Dinero{% endblock %}
+
+{% block navbar %}
+<div class="navbar">
+    <div class="navbar-brand">💸 NequiZ</div>
+    <div class="navbar-menu">
+        <a href="/perfil">🏠 Inicio</a>
+        <a href="/transferir">💸 Transferir</a>
+        <a href="/movimientos">📊 Movimientos</a>
+        <a href="#" onclick="cerrarSesion()" style="color: #ef4444;">🚪 Salir</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 600px; margin: 0 auto;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+        <h2 style="color: #667eea; margin: 0;">💸 Transferir Dinero</h2>
+        <a href="/perfil" class="btn btn-secondary" style="padding: 8px 16px; font-size: 0.9em;">← Volver</a>
+    </div>
+
+    <div id="saldoInfo" class="loading" style="margin-bottom: 25px;">Cargando saldo...</div>
+
+    <form id="transferenciaForm">
+        <div class="form-group">
+            <label for="numeroDestino">Número de Destino</label>
+            <input 
+                type="text" 
+                id="numeroDestino" 
+                placeholder="3009876543" 
+                required 
+                pattern="[0-9]{10}"
+                maxlength="10"
+            >
+            <div id="destinatarioInfo" style="margin-top: 10px; padding: 10px; background: #f0fdf4; border-radius: 8px; display: none;">
+                <strong style="color: #10b981;">✓</strong> <span id="nombreDestino"></span>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="monto">Monto</label>
+            <input 
+                type="number" 
+                id="monto" 
+                placeholder="50000" 
+                required 
+                min="1"
+                step="1"
+            >
+            <small style="color: #666; display: block; margin-top: 5px;">Ingresa el monto en pesos colombianos (COP)</small>
+        </div>
+
+        <div class="form-group">
+            <label for="mensaje">Mensaje (Opcional)</label>
+            <textarea 
+                id="mensaje" 
+                placeholder="Escribe un mensaje..." 
+                rows="3"
+                maxlength="200"
+            ></textarea>
+        </div>
+
+        <button type="submit" class="btn" style="width: 100%; margin-bottom: 10px;">
+            Enviar Dinero
+        </button>
+
+        <button type="button" class="btn btn-secondary" onclick="window.location.href='/perfil'" style="width: 100%;">
+            Cancelar
+        </button>
+    </form>
+
+    <div id="loading" class="loading hidden">
+        <p>Procesando transferencia...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Verificar autenticación
+    if (!estaAutenticado()) {
+        window.location.href = '/login';
+    }
+
+    let saldoActual = 0;
+
+    // Cargar saldo del usuario
+    async function cargarSaldo() {
+        try {
+            const response = await fetchConJWT('/api/perfil/saldo');
+            
+            if (!response) return;
+
+            const data = await response.json();
+
+            if (response.ok) {
+                saldoActual = data.saldo;
+                document.getElementById('saldoInfo').innerHTML = `
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 10px; color: white; text-align: center;">
+                        <p style="margin: 0; opacity: 0.9; font-size: 0.9em;">Tu Saldo Disponible</p>
+                        <h2 style="margin: 10px 0 0 0; font-size: 2em;">$${saldoActual.toLocaleString('es-CO')}</h2>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    }
+
+    // Validar destinatario cuando se ingresa el número
+    let timeoutValidacion = null;
+    document.getElementById('numeroDestino').addEventListener('input', (e) => {
+        const numero = e.target.value;
+        
+        // Limpiar timeout anterior
+        clearTimeout(timeoutValidacion);
+        
+        // Ocultar info de destinatario
+        document.getElementById('destinatarioInfo').style.display = 'none';
+        
+        // Solo validar si tiene 10 dígitos
+        if (numero.length === 10) {
+            timeoutValidacion = setTimeout(async () => {
+                await validarDestinatario(numero);
+            }, 500);
+        }
+    });
+
+    async function validarDestinatario(numero) {
+        try {
+            const response = await fetchConJWT('/api/transferencias/validar-destinatario', {
+                method: 'POST',
+                body: JSON.stringify({ numeroDestino: numero })
+            });
+
+            if (!response) return;
+
+            const data = await response.json();
+
+            if (response.ok && data.existe) {
+                document.getElementById('nombreDestino').textContent = data.nombre;
+                document.getElementById('destinatarioInfo').style.display = 'block';
+            } else {
+                mostrarAlerta('Usuario no encontrado', 'error');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    }
+
+    // Manejar envío del formulario
+    document.getElementById('transferenciaForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const numeroDestino = document.getElementById('numeroDestino').value;
+        const monto = parseFloat(document.getElementById('monto').value);
+        const mensaje = document.getElementById('mensaje').value.trim();
+
+        // Validaciones
+        if (!/^[0-9]{10}$/.test(numeroDestino)) {
+            mostrarAlerta('Número de destino inválido', 'error');
+            return;
+        }
+
+        if (isNaN(monto) || monto <= 0) {
+            mostrarAlerta('Monto inválido', 'error');
+            return;
+        }
+
+        if (monto > saldoActual) {
+            mostrarAlerta(`Saldo insuficiente. Tienes $${saldoActual.toLocaleString('es-CO')}`, 'error');
+            return;
+        }
+
+        // Confirmar transferencia
+        const confirmar = confirm(`¿Confirmar transferencia de $${monto.toLocaleString('es-CO')} a ${numeroDestino}?`);
+        
+        if (!confirmar) return;
+
+        // Mostrar loading
+        document.getElementById('transferenciaForm').style.display = 'none';
+        document.getElementById('loading').classList.remove('hidden');
+
+        try {
+            const response = await fetchConJWT('/api/transferencias/enviar', {
+                method: 'POST',
+                body: JSON.stringify({
+                    numeroDestino,
+                    monto,
+                    mensaje
+                })
+            });
+
+            if (!response) return;
+
+            const data = await response.json();
+
+            if (response.ok) {
+                mostrarAlerta('¡Transferencia exitosa!', 'success');
+                
+                // Redirigir al perfil después de 2 segundos
+                setTimeout(() => {
+                    window.location.href = '/perfil';
+                }, 2000);
+            } else {
+                mostrarAlerta(data.error || 'Error al realizar transferencia', 'error');
+                document.getElementById('transferenciaForm').style.display = 'block';
+                document.getElementById('loading').classList.add('hidden');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            mostrarAlerta('Error de conexión', 'error');
+            document.getElementById('transferenciaForm').style.display = 'block';
+            document.getElementById('loading').classList.add('hidden');
+        }
+    });
+
+    // Cargar saldo al iniciar
+    cargarSaldo();
+</script>
+{% endblock %}
