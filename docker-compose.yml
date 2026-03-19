@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # Servicio 1: Nuestra Base de Datos MongoDB
+  mongodb:
+    image: mongo:6.0
+    container_name: nequiz_mongo
+    ports:
+      - "27017:27017" # Exponemos el puerto para usar MongoDB Compass localmente si lo deseas
+    volumes:
+      - nequiz_data:/data/db # Almacenamiento persistente
+    networks:
+      - nequiz_network
+
+  # Servicio 2: Nuestro Backend en Flask (App NequiZ)
+  api_nequiz:
+    build: .
+    container_name: nequiz_backend
+    ports:
+      - "5000:5000"
+    environment:
+      # Inyección principal del host hacia nuestro contenedor de BD
+      - MONGODB_URI=mongodb://mongodb:27017/
+      - DEBUG=True
+    depends_on:
+      - mongodb
+    networks:
+      - nequiz_network
+    volumes:
+      # Bind mounting: Mapea tu código local en vivo al contenedor 
+      # (Cambios en tu código reiniciarán flask sin tener que hacer rebuild de Docker)
+      - .:/app
+      # Ignoramos expresamente los directorios locales basura mediante volúmenes anónimos
+      - /app/venv
+      - /app/.venv
+      - /app/__pycache__
+
+networks:
+  nequiz_network:
+    driver: bridge # Red privada de NequiZ
+
+# Definimos el volumen persistente real en docker
+volumes:
+  nequiz_data:
