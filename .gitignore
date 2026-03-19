@@ -5,4 +5,3 @@ venv/
 .vscode/
 .idea/
 *.log
-nequi.db

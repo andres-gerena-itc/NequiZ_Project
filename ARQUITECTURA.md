@@ -51,3 +51,54 @@ Orquestan el flujo sin tocar detalles técnicos:
 
 ## 🚀 Ruta de Implementación
 El primer paso será modelar las entidades en el directorio `domain/`, extraer la lógica hacia casos de uso en `application/` y definir consultas a MongoDB como contratos (Puertos) para invertir la dependencia funcional. El progreso se evidenciará a lo largo de las 5 fases de refactorización detalladas en el alcance del curso.
+
+## 🚩 Fase 2: Dominio y Pruebas Unitarias
+
+Esta fase se enfoca en construir el núcleo soberano de NequiZ, aislando por completo la lógica de negocio de cualquier dependencia tecnológica externa. Se modelan las entidades puras de Usuario y Transaccion, encapsulando sus estados y comportamientos financieros (como la validación de fondos, débitos, créditos y la clasificación de movimientos) sin utilizar importaciones de Flask, MongoDB o cualquier otra librería de infraestructura. Asimismo, se definen los puertos (interfaces) que establecen los contratos estrictos de entrada y salida, garantizando que el 100% de las reglas de dominio puedan ser validadas mediante pruebas unitarias aisladas, ejecutables en milisegundos y sin necesidad de levantar el servidor o la base de datos.
+
+### Pruebas Unitarias
+**Bloque 1 — Saldo del Usuario**
+1. `debitar` descuenta el saldo correctamente
+2. `acreditar` suma el saldo correctamente
+3. `tiene_saldo_suficiente` retorna `True` cuando alcanza
+4. `tiene_saldo_suficiente` retorna `False` cuando no alcanza
+5. `debitar` lanza `SaldoInsuficienteError` si no hay saldo
+6. `debitar` lanza `MontoInvalidoError` con monto cero
+7. `debitar` lanza `MontoInvalidoError` con monto negativo
+8. `acreditar` lanza `MontoInvalidoError` con monto cero
+9. `acreditar` lanza `MontoInvalidoError` con monto negativo
+10. Debitar y acreditar el mismo monto deja saldo igual
+
+**Bloque 2 — Datos Personales del Usuario**
+
+11. `desactivar` cambia `activo` a `False`
+12. Usuario nuevo está `activo=True` por defecto
+13. `actualizar_nombre` cambia el nombre
+14. `actualizar_nombre` elimina espacios en los extremos
+15. `actualizar_nombre` lanza error si es muy corto
+16. `actualizar_nombre` lanza error si está vacío
+17. `actualizar_biografia` guarda el texto correctamente
+18. `actualizar_biografia` lanza error si supera 500 chars
+19. Biografía de exactamente 500 chars es válida
+10. `PerfilUsuario` tiene valores por defecto correctos
+
+**Bloque 3 — Entidad Transaccion**
+
+21. Transacción válida se crea sin errores
+22. Genera ID automáticamente
+23. Dos transacciones tienen IDs únicos
+24. Lanza error con monto cero
+25. Lanza error con monto negativo
+26. Lanza error si origen == destino
+27. Lanza error si monto supera 50 millones
+28. `tipo_para_usuario` retorna `ENVIADO` al origen
+29. `tipo_para_usuario` retorna `RECIBIDO` al destino
+30. `tipo_para_usuario` retorna `RECIBIDO` para terceros
+31. `marcar_como_fallida` cambia el estado
+32. Monto exactamente de 50 millones es válido
+
+**Bloque 4 — Excepciones de Dominio**
+
+33. Todas las excepciones heredan de `DomainError`
+34. `DomainError` hereda de `Exception`
+35. La excepción conserva su mensaje de error
