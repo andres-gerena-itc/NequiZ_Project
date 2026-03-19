@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}Movimientos - NequiZ{% endblock %}
+{% block subtitle %}Historial de Transacciones{% endblock %}
+
+{% block navbar %}
+<div class="navbar">
+    <div class="navbar-brand">💸 NequiZ</div>
+    <div class="navbar-menu">
+        <a href="/perfil">🏠 Inicio</a>
+        <a href="/transferir">💸 Transferir</a>
+        <a href="/movimientos">📊 Movimientos</a>
+        <a href="#" onclick="cerrarSesion()" style="color: #ef4444;">🚪 Salir</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+        <h2 style="color: #667eea; margin: 0;">📊 Historial de Movimientos</h2>
+        <a href="/perfil" class="btn btn-secondary" style="padding: 8px 16px; font-size: 0.9em;">← Volver</a>
+    </div>
+
+    <div id="estadisticasContainer" class="loading">Cargando estadísticas...</div>
+</div>
+
+<div class="card">
+    <h3 style="color: #667eea; margin-bottom: 20px;">Todas las Transacciones</h3>
+    <div id="movimientosContainer" class="loading">Cargando movimientos...</div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Verificar autenticación
+    if (!estaAutenticado()) {
+        window.location.href = '/login';
+    }
+
+    // Cargar estadísticas usando GraphQL
+    async function cargarEstadisticas() {
+        const query = `
+            query {
+                misEstadisticas(periodo: "MES_ACTUAL") {
+                    totalEnviado
+                    totalRecibido
+                    cantidadTransacciones
+                    balance
+                }
+            }
+        `;
+
+        try {
+            const response = await fetchConJWT('/graphql', {
+                method: 'POST',
+                body: JSON.stringify({ query })
+            });
+
+            if (!response) return;
+
+            const data = await response.json();
+
+            if (data.data && data.data.misEstadisticas) {
+                mostrarEstadisticas(data.data.misEstadisticas);
+            } else {
+                document.getElementById('estadisticasContainer').innerHTML = '<p style="text-align: center; color: #666;">No se pudieron cargar estadísticas</p>';
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            document.getElementById('estadisticasContainer').innerHTML = '<p style="text-align: center; color: #666;">Error al cargar estadísticas</p>';
+        }
+    }
+
+    function mostrarEstadisticas(stats) {
+        const html = `
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+                <div style="background: #dcfce7; padding: 20px; border-radius: 10px; text-align: center;">
+                    <div style="font-size: 0.9em; color: #166534; margin-bottom: 10px;">Total Recibido</div>
+                    <div style="font-size: 1.8em; font-weight: 700; color: #10b981;">+$${stats.totalRecibido.toLocaleString('es-CO')}</div>
+                </div>
+                
+                <div style="background: #fee2e2; padding: 20px; border-radius: 10px; text-align: center;">
+                    <div style="font-size: 0.9em; color: #991b1b; margin-bottom: 10px;">Total Enviado</div>
+                    <div style="font-size: 1.8em; font-weight: 700; color: #ef4444;">-$${stats.totalEnviado.toLocaleString('es-CO')}</div>
+                </div>
+                
+                <div style="background: #dbeafe; padding: 20px; border-radius: 10px; text-align: center;">
+                    <div style="font-size: 0.9em; color: #1e40af; margin-bottom: 10px;">Transacciones</div>
+                    <div style="font-size: 1.8em; font-weight: 700; color: #3b82f6;">${stats.cantidadTransacciones}</div>
+                </div>
+                
+                <div style="background: ${stats.balance >= 0 ? '#dcfce7' : '#fee2e2'}; padding: 20px; border-radius: 10px; text-align: center;">
+                    <div style="font-size: 0.9em; color: ${stats.balance >= 0 ? '#166534' : '#991b1b'}; margin-bottom: 10px;">Balance del Mes</div>
+                    <div style="font-size: 1.8em; font-weight: 700; color: ${stats.balance >= 0 ? '#10b981' : '#ef4444'};">${stats.balance >= 0 ? '+' : ''}$${stats.balance.toLocaleString('es-CO')}</div>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('estadisticasContainer').innerHTML = html;
+    }
+
+    // Cargar movimientos usando GraphQL
+    async function cargarMovimientos() {
+        const query = `
+            query {
+                misMovimientos(limite: 50, tipo: "TODOS") {
+                    id
+                    tipo
+                    numeroOrigen
+                    nombreOrigen
+                    numeroDestino
+                    nombreDestino
+                    monto
+                    mensaje
+                    fecha
+                    estado
+                }
+            }
+        `;
+
+        try {
+            const response = await fetchConJWT('/graphql', {
+                method: 'POST',
+                body: JSON.stringify({ query })
+            });
+
+            if (!response) return;
+
+            const data = await response.json();
+
+            if (data.data && data.data.misMovimientos) {
+                mostrarMovimientos(data.data.misMovimientos);
+            } else {
+                document.getElementById('movimientosContainer').innerHTML = '<p style="text-align: center; color: #666;">No se pudieron cargar movimientos</p>';
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            document.getElementById('movimientosContainer').innerHTML = '<p style="text-align: center; color: #666;">Error al cargar movimientos</p>';
+        }
+    }
+
+    function mostrarMovimientos(movimientos) {
+        if (movimientos.length === 0) {
+            document.getElementById('movimientosContainer').innerHTML = '<p style="text-align: center; color: #666;">No tienes movimientos aún</p>';
+            return;
+        }
+
+        let html = '';
+        movimientos.forEach(mov => {
+            const esEnviado = mov.tipo === 'ENVIADO';
+            const color = esEnviado ? '#ef4444' : '#10b981';
+            const bgColor = esEnviado ? '#fee2e2' : '#dcfce7';
+            const icono = esEnviado ? '↗' : '↙';
+            const nombre = esEnviado ? mov.nombreDestino : mov.nombreOrigen;
+            const numero = esEnviado ? mov.numeroDestino : mov.numeroOrigen;
+            
+            const fecha = new Date(mov.fecha);
+            const fechaFormato = fecha.toLocaleDateString('es-CO', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            html += `
+                <div style="padding: 20px; background: ${bgColor}; border-radius: 10px; margin-bottom: 15px; border-left: 4px solid ${color};">
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 700; color: ${color}; font-size: 1.1em; margin-bottom: 5px;">
+                                ${icono} ${mov.tipo}
+                            </div>
+                            <div style="color: #374151; font-weight: 600;">${nombre}</div>
+                            <div style="color: #6b7280; font-size: 0.9em;">${numero}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 1.5em; font-weight: 700; color: ${color};">
+                                ${esEnviado ? '-' : '+'}$${mov.monto.toLocaleString('es-CO')}
+                            </div>
+                            <div style="font-size: 0.75em; color: #9ca3af; margin-top: 5px;">
+                                ${fechaFormato}
+                            </div>
+                        </div>
+                    </div>
+                    ${mov.mensaje ? `
+                        <div style="margin-top: 10px; padding: 10px; background: white; border-radius: 6px; color: #6b7280; font-size: 0.9em;">
+                            💬 "${mov.mensaje}"
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        });
+
+        document.getElementById('movimientosContainer').innerHTML = html;
+    }
+
+    // Cargar datos al iniciar
+    cargarEstadisticas();
+    cargarMovimientos();
+</script>
+{% endblock %}
