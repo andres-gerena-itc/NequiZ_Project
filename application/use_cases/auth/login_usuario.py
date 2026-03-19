@@ -12,7 +12,7 @@ from domain.ports.repositories.usuario_repository import UsuarioRepository
 from domain.ports.repositories.sesion_repository import SesionRepository
 from domain.ports.services.password_service import PasswordService
 from domain.ports.services.token_service import TokenService
-from config import Config
+from datetime import timedelta
 
 
 @dataclass
@@ -37,15 +37,17 @@ class LoginUsuarioUseCase:
 
     def __init__(
         self,
-        usuario_repo: UsuarioRepository,
-        sesion_repo: SesionRepository,
-        password_service: PasswordService,
-        token_service: TokenService,
+        usuario_repo,
+        sesion_repo,
+        password_service,
+        token_service,
+        duracion_sesion: timedelta = timedelta(days=30),
     ):
         self._usuario_repo = usuario_repo
         self._sesion_repo = sesion_repo
         self._password_service = password_service
         self._token_service = token_service
+        self._duracion_sesion = duracion_sesion
 
     def ejecutar(self, datos: LoginInput) -> LoginOutput:
         usuario = self._usuario_repo.buscar_por_telefono(datos.numero_telefono)
@@ -70,7 +72,7 @@ class LoginUsuarioUseCase:
         self._sesion_repo.guardar_sesion(
             numero_telefono=usuario.numero_telefono,
             refresh_token=refresh_token,
-            fecha_expiracion=datetime.utcnow() + Config.JWT_REFRESH_TOKEN_EXPIRES,
+            fecha_expiracion=datetime.utcnow() + self._duracion_sesion,
             dispositivo=datos.dispositivo,
             ip=datos.ip,
         )
