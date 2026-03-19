@@ -1,0 +1,16 @@
+.venv
+venv
+env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.git
+.gitignore
+.env
+tests/
+.pytest_cache/
+.vscode/
+.idea/
+.env.example
