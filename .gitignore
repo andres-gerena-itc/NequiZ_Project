@@ -6,3 +6,6 @@ venv/
 .idea/
 *.log
 .env.example
+@Guia_Arquitectura_Hexagonal.pdf
+@Trabajo_Extra_Clase.pdf
+.coverage

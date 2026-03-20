@@ -28,6 +28,7 @@ La arquitectura original presenta un flujo de control bidireccional y fuertement
 Durante la Fase 1, se documentaron las siguientes vulnerabilidades críticas en el diseño actual:
 
 1. **Acoplamiento de Transporte e Infraestructura:** En `graphql_schema/queries.py` (líneas 20-30), el resolver de GraphQL ejecuta directamente `transacciones_collection.find({...})`. Un adaptador de entrada habla directamente con uno de salida, impidiendo migrar de MongoDB a otra base de datos sin reescribir el controlador.
+2. **Lógica de Negocio en Enlazadores Web:** En `routes/transferencias.py`, las reglas del negocio fundamentales, tales como validar que un saldo sea suficiente (`if usuario_origen['saldo'] < monto:`), están duramente acopladas a la formación de las respuestas HTTP (`jsonify`), imposibilitando el testing unitario y la reutilización del cálculo.
 2. **Fuga de Reglas de Negocio:** En `graphql_schema/queries.py` (línea 40), la clasificación del movimiento (`'ENVIADO'` o `'RECIBIDO'`) se realiza durante el formateo de la respuesta. Esta regla de negocio fundamental no puede ser reutilizada por la API REST sin duplicar el código en `routes/perfil.py`.
 3. **Dependencia del Framework en Lógica de Identidad:** En `graphql_schema/queries.py` (líneas 15-20), la identidad se obtiene recorriendo `info.context` y los headers de Flask, haciendo imposible probar la autenticación mediante pruebas unitarias puras sin simular el servidor web.
 
@@ -102,3 +103,111 @@ Esta fase se enfoca en construir el núcleo soberano de NequiZ, aislando por com
 33. Todas las excepciones heredan de `DomainError`
 34. `DomainError` hereda de `Exception`
 35. La excepción conserva su mensaje de error
+
+## 🖼️ Modelo C4 de la Arquitectura Hexagonal NequiZ
+
+Para ilustrar de forma escalable el diseño de la billetera digital, aplicamos el modelo C4 estructurado en 4 niveles de abstracción concéntricos: Contexto, Contenedores, Componentes y Código.
+
+### Nivel 1: Diagrama de Contexto
+*Propósito:* Mostrar el sistema en su totalidad y su interacción con los usuarios.
+
+```mermaid
+graph TD
+    User([👤 Usuario NequiZ])
+    Sys[("💳 NequiZ System")]
+    
+    User -- "Administra cuenta, envía/recibe dinero\ny ve historial transaccional" --> Sys
+```
+
+### Nivel 2: Diagrama de Contenedores
+*Propósito:* Mostrar las piezas de software desplegables y las bases de datos.
+
+```mermaid
+graph TD
+    User([👤 Usuario Móvil / Web])
+    
+    subgraph Sistema NequiZ
+        SPA["Cliente Web Frontend\n(HTML/JS)"]
+        API["Backend API\n(Python, Flask & Graphene)"]
+    end
+    DB[("Base de Datos\n(MongoDB)")]
+    
+    User -- "Navega [HTTPS]" --> SPA
+    SPA -- "Consume Endpoints [REST/GraphQL]" --> API
+    API -- "Lee y Escribe documentos [PyMongo]" --> DB
+```
+
+### Nivel 3: Diagrama de Componentes (Hexágono)
+*Propósito:* Zoom en el contenedor Backend (API), mostrando explícitamente los módulos (Adaptadores y Puertos) respetando las fronteras estrictas de la arquitectura Hexagonal y la Inversión de Dependencias.
+
+```mermaid
+graph LR
+    subgraph Adaptadores Primarios - Driving
+        REST["Rutas Flask REST"]
+        GQL["Resolvers GraphQL"]
+    end
+    
+    subgraph El Hexágono Soberano (Dominio y App)
+        PortIn("Puertos de Entrada\n(Interfaces)")
+        UC{"Casos de Uso\n(Ej: EnviarDinero)"}
+        Entities(("Entidades Dominio\n(Transaccion, Perfil)"))
+        PortOut("Puertos de Salida\n(Interfaces)")
+        
+        PortIn --> |Implementado por| UC
+        UC --> |Aplica reglas sobre| Entities
+        UC --> |Demanda persistencia vía| PortOut
+    end
+    
+    subgraph Adaptadores Secundarios - Driven
+        DB_Adapter["Repositorio MongoDB"]
+        Mem_Adapter["Repositorio en Memoria (Fakes)"]
+    end
+    
+    REST --> |Instancia Comandos hacia| PortIn
+    GQL --> |Ejecuta Consultas hacia| PortIn
+    DB_Adapter -.-> |Satisface contrato / Implementa| PortOut
+    Mem_Adapter -.-> |Satisface contrato / Implementa| PortOut
+
+    classDef core fill:#f9f,stroke:#333,stroke-width:2px;
+    class Entities core;
+```
+
+### Nivel 4: Diagrama de Código (Clases UML)
+*Propósito:* Zoom a las clases puras que solucionan un flujo crítico de negocio (Transferencia P2P), demostrando que la lógica está aislada en la Entidad sin importar el tipo de repositorio o framework de red.
+
+```mermaid
+classDiagram
+    class Transaccion {
+        +UUID id
+        +str numeroOrigen
+        +str numeroDestino
+        +float monto
+        +datetime fecha
+        +str estado
+        +marcar_como_exitosa()
+        +marcar_como_fallida()
+    }
+
+    class EnviarDineroUseCase {
+        -UsuarioRepository user_repo
+        -TransaccionRepository trans_repo
+        +__init__(user_repo, trans_repo)
+        +ejecutar(numero_origen, numero_destino, monto) Transaccion
+    }
+
+    class TransaccionRepositoryPort {
+        <<interface>>
+        +guardar(transaccion: Transaccion)
+        +buscar_por_id(id: str)
+    }
+    
+    class MongoTransaccionRepository {
+        -Collection col
+        +guardar(transaccion: Transaccion)
+        +buscar_por_id(id: str)
+    }
+
+    EnviarDineroUseCase --> Transaccion : Crea e invoca reglas de
+    EnviarDineroUseCase --> TransaccionRepositoryPort : Depende funcionalmente de
+    MongoTransaccionRepository ..|> TransaccionRepositoryPort : Implementa la abstracción de
+```

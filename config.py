@@ -10,6 +10,7 @@ load_dotenv()
 class Config:
     MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/')
     DATABASE_NAME = 'nequiz_db'
+    MODO_REPOSITORIO = os.getenv('MODO_REPOSITORIO', 'mongodb')
 
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'nequiz-secret-key-change-in-production')
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)

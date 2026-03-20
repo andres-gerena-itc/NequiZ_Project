@@ -58,12 +58,29 @@ cd NequiZ_Project_Hexagonal
 copy .env.example .env
 ```
 
-**Paso 3:** Levanta toda la infraestructura con **Docker Compose**. 
+**Paso 3:** Configura e Inicia la Aplicación según el Modo de Ejecución:
+
+NequiZ implementa verdaderos *Separation of Concerns*. Puedes ejecutar el núcleo de negocio puro sin base de datos, o el sistema completo.
+
+👉 **Opción A - MODO MEMORIA (Recomendado para Pruebas Ligeras):**
+No requiere base de datos. Usa repositorios *fakes* inyectados al vuelo.
+1. En tu archivo `.env`, asegúrate de tener: `MODO_REPOSITORIO=memoria`
+2. Ejecuta la API localmente rápido y sin dependencias:
+```bash
+python app.py
+```
+3. Ejecuta la suite de pruebas unitarias y de integración (Coherencia \> 85%):
+```bash
+python -m pytest --cov=domain --cov=application --cov=infrastructure tests/
+```
+
+👉 **Opción B - MODO REAL CON MONGODB (Entorno Integrado):**
+1. En tu archivo `.env`, asegúrate de tener: `MODO_REPOSITORIO=mongodb`
+2. Levanta toda la infraestructura con **Docker Compose** (descarga Mongo y expone la API).
 ```bash
 docker compose up --build -d
 ```
-
-**Paso 4:** Finalizado el proceso, puedes consultar los registros de tu backend para observar la correcta inserción de datos iniciales *(Seed)*:
+3. Finalizado el proceso, puedes consultar los registros de tu backend para observar la correcta inserción de datos iniciales *(Seed)*:
 ```bash
 docker compose logs -f api_nequiz
 ```

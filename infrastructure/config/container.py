@@ -40,11 +40,24 @@ class Container:
 
     def __init__(self):
         # ── Adaptadores secundarios ──────────────────────────────────────
-        self.usuario_repo = MongoUsuarioRepository()
-        self.transaccion_repo = MongoTransaccionRepository()
-        self.sesion_repo = MongoSesionRepository()
-        self.token_service = JwtTokenService()
-        self.password_service = BcryptPasswordService()
+        if Config.MODO_REPOSITORIO == 'memoria':
+            from tests.fakes.fake_usuario_repository import FakeUsuarioRepository
+            from tests.fakes.fake_transaccion_repository import FakeTransaccionRepository
+            from tests.fakes.fake_sesion_repository import FakeSesionRepository
+            from tests.fakes.fake_token_service import FakeTokenService
+            from tests.fakes.fake_password_service import FakePasswordService
+            
+            self.usuario_repo = FakeUsuarioRepository()
+            self.transaccion_repo = FakeTransaccionRepository()
+            self.sesion_repo = FakeSesionRepository()
+            self.token_service = FakeTokenService()
+            self.password_service = FakePasswordService()
+        else:
+            self.usuario_repo = MongoUsuarioRepository()
+            self.transaccion_repo = MongoTransaccionRepository()
+            self.sesion_repo = MongoSesionRepository()
+            self.token_service = JwtTokenService()
+            self.password_service = BcryptPasswordService()
 
         # ── Casos de uso: Auth ───────────────────────────────────────────
         self.registrar_usuario_uc = RegistrarUsuarioUseCase(
