@@ -147,7 +147,7 @@ graph LR
         GQL["Resolvers GraphQL"]
     end
     
-    subgraph El Hexágono Soberano (Dominio y App)
+    subgraph El Hexágono Soberano - Dominio y App
         PortIn("Puertos de Entrada\n(Interfaces)")
         UC{"Casos de Uso\n(Ej: EnviarDinero)"}
         Entities(("Entidades Dominio\n(Transaccion, Perfil)"))
