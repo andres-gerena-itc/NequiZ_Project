@@ -37,8 +37,8 @@ Para subsanar la deuda técnica, se modelará un núcleo independiente de Flask,
 
 ### 1. Entidades de Dominio
 Objetos puros que no conocen bases de datos ni frameworks:
-* **Usuario:** Gestiona `telefono, nombre, saldo, password_hash`. Incluye comportamientos como `validar_fondos(monto)`, `debitar(monto)` y `acreditar(monto)`.
-* **Transaccion:** Gestiona `id, origen, destino, monto, fecha, estado`. Incluye comportamientos como `marcar_exitosa()`, `marcar_fallida()` y `clasificar_movimiento(telefono)`.
+* **Usuario:** Gestiona `numero_telefono, nombre, saldo, password_hash`. Incluye comportamientos como `tiene_saldo_suficiente(monto)`, `debitar(monto)` y `acreditar(monto)`.
+* **Transaccion:** Gestiona `id, origen, destino, monto, fecha, estado`. Incluye comportamientos como `marcar_como_fallida()` y `tipo_para_usuario(telefono)`.
 
 ### 2. Capa de Aplicación (Casos de Uso)
 Orquestan el flujo sin tocar detalles técnicos:
@@ -46,8 +46,8 @@ Orquestan el flujo sin tocar detalles técnicos:
 * **`ConsultarHistorialUseCase`:** Recupera transacciones, aplica clasificación a través de la entidad y retorna DTOs limpios.
 
 ### 3. Catálogo de Puertos
-* **Puertos de Salida (Outbound):** * `IUsuarioRepository`: Contratos `obtener_por_telefono(telefono)` y `actualizar(usuario)`.
-  * `ITransaccionRepository`: Contratos `guardar_transaccion(transaccion)` y `buscar_historial(telefono)`.
+* **Puertos de Salida (Outbound):** * `UsuarioRepository`: Contratos `buscar_por_telefono(telefono)` y `actualizar(usuario)`.
+  * `TransaccionRepository`: Contratos `guardar(transaccion)` y `buscar_por_usuario(telefono)`.
 * **Puertos de Entrada (Inbound):** Interfaces consumidas por `app.py` y `queries.py` mediante comandos estandarizados.
 
 ## 🚀 Ruta de Implementación
@@ -103,6 +103,56 @@ Esta fase se enfoca en construir el núcleo soberano de NequiZ, aislando por com
 33. Todas las excepciones heredan de `DomainError`
 34. `DomainError` hereda de `Exception`
 35. La excepción conserva su mensaje de error
+
+## 🚩 Fase 3: Pruebas Unitarias a Casos de Uso
+
+**1. Gestión de Identidad (Auth)**
+*   `test_01_registrar_usuario_retorna_tokens`
+*   `test_02_registrar_usuario_guarda_en_repositorio`
+*   `test_03_registrar_usuario_hashea_la_contrasena`
+*   `test_04_registrar_usuario_duplicado_lanza_error`
+*   `test_05_registrar_guarda_sesion`
+*   `test_06_email_duplicado_lanza_error`
+*   `test_07_login_exitoso_retorna_tokens`
+*   `test_08_login_contrasena_incorrecta_lanza_error`
+*   `test_09_login_usuario_inexistente_lanza_error`
+*   `test_10_login_retorna_datos_del_usuario`
+
+**2. Gestión de Perfil**
+*   `test_11_obtener_perfil_retorna_datos_correctos`
+*   `test_12_obtener_perfil_inexistente_lanza_error`
+*   `test_13_actualizar_nombre_persiste_cambio`
+*   `test_14_obtener_saldo_retorna_valor_correcto`
+
+**3. Motor Transaccional P2P / Transferencias**
+*   `test_15_enviar_dinero_descuenta_saldo_origen`
+*   `test_16_enviar_dinero_acredita_saldo_destino`
+*   `test_17_enviar_dinero_registra_transaccion`
+*   `test_18_enviar_dinero_insuficiente_lanza_error`
+*   `test_19_validar_destinatario_existente`
+*   `test_20_validar_destinatario_inexistente`
+
+**4. Histórico y Movimientos**
+*   `test_21_obtener_movimientos_retorna_lista`
+*   `test_22_movimientos_filtrados_por_tipo_enviado`
+*   `test_23_estadisticas_calcula_total_enviado`
+*   `test_24_estadisticas_calcula_total_recibido`
+*   `test_25_estadisticas_calcula_balance`
+
+## 🚩 Fase 4: Adaptadores de Entrada y Evolución Demostrativa
+
+Esta fase demuestra el verdadero poder de la Arquitectura Hexagonal: la capacidad de conectar múltiples interfaces (canales de entrada) y tecnologías de almacenamiento (tecnologías de salida) en simultáneo, sin alterar ni una sola línea de código del Dominio ni de los Casos de Uso. NequiZ implementa exitosamente los siguientes adaptadores como prueba irrefutable de esta flexibilidad:
+
+### 1. Adaptadores de Entrada (Driving Adapters)
+El sistema responde a tres "actores" diferentes que inician flujos de negocio. Cada uno posee su propio adaptador que traduce peticiones tecnológicas en comandos limpios (DTOs) hacia los Puertos de Entrada:
+* **API REST (Flask + Blueprints):** Orquesta las peticiones HTTP tradicionales (POST, GET) exigidas como canal de integración principal del sistema, validando datos JSON y gestionando la seguridad mediante tokens JWT.
+* **API GraphQL (Graphene):** Facilita consultas flexibles por parte del cliente (ej. `miPerfil` o `misMovimientos`). GraphQL devuelve los mismos resultados de negocio sin modificar los Casos de Uso existentes, demostrando una evolución impecable de un "Nuevo Canal de Entrada".
+* **CLI (Interfaz de Línea de Comandos):** Un adaptador administrativo construido nativamente en Python, que permite invocar el motor transaccional directamente desde la consola del servidor y despachar pagos. Demuestra que el núcleo del negocio es **100% agnóstico a la Web** y no depende en absoluto del framework web para funcionar.
+
+### 2. Adaptadores de Salida (Driven Adapters / Repositorios)
+Para evidenciar el total aislamiento de la persistencia de datos (Puerto de Salida), el sistema es capaz de conmutar en tiempo real (mediante Inversión de Dependencias y el Patrón Contenedor) entre dos implementaciones concretas radicalmente distintas:
+* **MongoDB Atlas (Producción):** Conecta a una base de datos NoSQL real utilizando `pymongo` en la nube, persistiendo registros y mapeando los documentos físicos de vuelta a "Entidades Puras" del dominio.
+* **Repositorio en Memoria (Fakes):** Diccionarios de Python en memoria RAM utilizados como adaptadores `Fake` para pruebas unitarias de Casos de Uso y pruebas de integración ultra rápidas, demostrando la capacidad de NequiZ de ejecutarse, validarse y ser "Testable en Aislamiento" sin necesidad de requerir contenedores o infraestructuras externas.
 
 ## 🖼️ Modelo C4 de la Arquitectura Hexagonal NequiZ
 
@@ -195,19 +245,19 @@ classDiagram
         +ejecutar(numero_origen, numero_destino, monto) Transaccion
     }
 
-    class TransaccionRepositoryPort {
+    class TransaccionRepository {
         <<interface>>
         +guardar(transaccion: Transaccion)
-        +buscar_por_id(id: str)
+        +buscar_por_usuario(numero_telefono: str)
     }
     
     class MongoTransaccionRepository {
         -Collection col
         +guardar(transaccion: Transaccion)
-        +buscar_por_id(id: str)
+        +buscar_por_usuario(numero_telefono: str)
     }
 
     EnviarDineroUseCase --> Transaccion : Crea e invoca reglas de
-    EnviarDineroUseCase --> TransaccionRepositoryPort : Depende funcionalmente de
-    MongoTransaccionRepository ..|> TransaccionRepositoryPort : Implementa la abstracción de
+    EnviarDineroUseCase --> TransaccionRepository : Depende funcionalmente de
+    MongoTransaccionRepository ..|> TransaccionRepository : Implementa la abstracción de
 ```
